@@ -1,10 +1,10 @@
 # Ghost_CMS
 
-Production **Docker Compose** deployment of [Ghost CMS](https://ghost.org/) powering **[alfycodes.me](https://alfycodes.me)** — a personal site for projects, tech writing, and career journey documentation.
+Production **Docker Compose** deployment of [Ghost CMS](https://ghost.org/) powering **[alfycodes.me](https://alfycodes.me)** — a personal site for projects, tech writing, and career journey documentation. It demonstrates two deployment options: use an existing host reverse proxy, or opt into the bundled Docker Nginx and Certbot.
 
 ## Purpose
 
-This repo exists to run a live Ghost blog in production. The site at [alfycodes.me](https://alfycodes.me) hosts:
+This repo runs a live Ghost blog in production and showcases two reverse-proxy arrangements. The site at [alfycodes.me](https://alfycodes.me) hosts:
 
 - **Projects** — working systems with real tradeoffs (FastAPI, Docker, infrastructure)
 - **Stories** — career rants, tech experiments, honest posts about figuring things out
@@ -12,36 +12,50 @@ This repo exists to run a live Ghost blog in production. The site at [alfycodes.
 
 It's a one-person workshop: build, break, document. Not polished case studies — real systems with real tradeoffs.
 
-## Quick start
+## Quick start: use an existing reverse proxy
 
 ```bash
 # 1. Copy and fill in environment variables
 cp .env.example .env
 
-# 2. Stop host Nginx/Certbot on ports 80/443 (they conflict with Docker Nginx)
-sudo systemctl stop nginx certbot
-
-# 3. Obtain TLS certificate
-./scripts/init-letsencrypt.sh
-
-# 4. Bring everything up
+# 2. Start Ghost and MySQL (the default; no bundled Nginx or Certbot)
 docker compose up -d
+```
+
+Ghost is available on `127.0.0.1:2368`, so an Nginx instance already running on the VPS can reverse-proxy to it. MySQL stays on the private Compose network and is not published to the host.
+
+## Alternative: use the bundled Docker Nginx
+
+To demonstrate or deploy the self-contained proxy option, enable the `docker-nginx` profile:
+
+```bash
+docker compose --profile docker-nginx up -d
+```
+
+This starts the same Ghost and MySQL services plus Docker Nginx and Certbot. Use this option only when host ports 80 and 443 are available; do not enable it alongside a host Nginx already listening on those ports. For first-time TLS setup, configure `CERTBOT_EMAIL` in `.env` and run `./scripts/init-letsencrypt.sh`.
+
+To stop the bundled proxy services while leaving Ghost and MySQL running:
+
+```bash
+docker compose --profile docker-nginx stop nginx certbot
 ```
 
 ## Architecture
 
 ```
-Internet → :80/:443 → Nginx (Docker) → Ghost :2368 → MySQL 8.4
-                                     ↕
-                             Certbot (auto-renew)
+Existing host Nginx ─┐
+                     ├─→ Ghost 127.0.0.1:2368 → MySQL 8.4
+Docker Nginx profile ┘        (shared Compose services)
+       ↕
+    Certbot
 ```
 
 | Component | Details |
 |---|---|
 | **Ghost** | `ghost:latest`, binds to `127.0.0.1:2368` (localhost only) |
 | **MySQL** | 8.4, data in `ghost_cms_postgres_data` volume |
-| **Nginx** | Alpine, `network_mode: host`, reverse proxy with TLS |
-| **Certbot** | Auto-renews every 12h; manual renewal via script |
+| **Nginx** | Optional `docker-nginx` profile; Alpine, `network_mode: host`, reverse proxy with TLS |
+| **Certbot** | Optional `docker-nginx` profile; renews certificates; manual renewal via script |
 | **SMTP** | Brevo (`smtp-relay.brevo.com:587`) for email |
 | **TLS** | Let's Encrypt, TLSv1.2/1.3 |
 
@@ -49,7 +63,7 @@ Internet → :80/:443 → Nginx (Docker) → Ghost :2368 → MySQL 8.4
 
 | Path | Purpose |
 |---|---|
-| `docker-compose.yml` | All services: MySQL, Ghost, Nginx, Certbot |
+| `docker-compose.yml` | Shared MySQL/Ghost services; Nginx and Certbot are opt-in via `docker-nginx` profile |
 | `nginx/conf.d/default.conf` | Reverse proxy config (HTTP → HTTPS, ACME challenge) |
 | `.env.example` | Required environment variables |
 | `scripts/init-letsencrypt.sh` | First-time TLS certificate request |
@@ -75,7 +89,7 @@ Copy `.env.example` to `.env` and fill in:
 
 ## Cron setup
 
-Auto-renew Let's Encrypt certificates daily:
+For the bundled Docker Nginx option, the Certbot container renews certificates periodically. The renewal script can also be scheduled daily:
 
 ```bash
 0 3 * * * /path/to/scripts/renew-certs.sh >> /var/log/letsencrypt-renew.log 2>&1
@@ -84,17 +98,13 @@ Auto-renew Let's Encrypt certificates daily:
 ## Requirements
 
 - Docker + Docker Compose v2
-- Ports 80/443 free (stop host Nginx/Certbot before first deploy)
+- Ports 80/443 must be free only when using the optional Docker Nginx profile
 - `.env` filled in (copy from `.env.example`)
 - Bash (for scripts)
 
 ## Ghost theme
 
 Looking for the theme used on this site? Check it out here: [placeholder-url]
-
-## Docker Compose without Nginx
-
-If you want to run Ghost without Nginx (you already have your own reverse proxy), here's a lightweight Docker Compose setup: [placeholder-url]
 
 ## Operational notes
 
