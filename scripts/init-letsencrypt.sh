@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # First-time Let's Encrypt certificate request.
-# Prerequisites: .env filled in, host Nginx/Certbot stopped (ports 80/443 free).
+# Prerequisites: .env filled in; the optional Docker Nginx profile requires ports 80/443 to be free.
 #
 # Usage:  ./scripts/init-letsencrypt.sh
 
@@ -17,13 +17,13 @@ if [ -z "$EMAIL" ]; then
 fi
 
 echo "==> Starting Nginx (HTTP-only, serving ACME challenge)..."
-docker compose up -d nginx
+docker compose --profile docker-nginx up -d nginx
 
 echo "==> Waiting for Nginx to be ready..."
 sleep 3
 
 echo "==> Requesting certificate for ${DOMAIN}..."
-docker compose run --rm certbot certbot certonly \
+docker compose --profile docker-nginx run --rm certbot certbot certonly \
   --webroot \
   --webroot-path="${WEBROOT}" \
   --email "${EMAIL}" \
@@ -33,7 +33,7 @@ docker compose run --rm certbot certbot certonly \
   -d "www.${DOMAIN}"
 
 echo "==> Reloading Nginx with TLS config..."
-docker compose exec nginx nginx -s reload
+docker compose --profile docker-nginx exec nginx nginx -s reload
 
 echo "==> Done. Certificate obtained at ${LETSENCRYPT_DIR}"
 echo "    Set up cron for auto-renewal:  0 3 * * * $(pwd)/scripts/renew-certs.sh"

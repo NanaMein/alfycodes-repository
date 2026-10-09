@@ -7,12 +7,12 @@ set -euo pipefail
 # This runs Certbot in standalone mode (briefly stops Nginx on port 80).
 
 echo "==> Pausing Nginx..."
-docker compose stop nginx
+docker compose --profile docker-nginx stop nginx
 
 echo "==> Running Certbot renewal..."
-docker compose run --rm certbot certbot renew --quiet
+docker compose --profile docker-nginx run --rm certbot certbot renew --quiet
 
 echo "==> Restarting Nginx..."
-docker compose start nginx
+docker compose --profile docker-nginx start nginx
 
 echo "==> Renewal complete."
